@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build output (if any)
+dist/
+build/
+
+# Secrets (should not be committed)
+*.pem
+*.key
+credentials/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Temp files
+*.tmp
+*.log

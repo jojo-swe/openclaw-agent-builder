@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenClaw Agent Builder v2</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .fade-in { animation: fadeIn 0.3s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .tooltip { position: relative; cursor: help; border-bottom: 1px dotted #666; }
+    .tooltip:hover::after {
+      content: attr(data-tip);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #333;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      white-space: pre-wrap;
+      max-width: 300px;
+      z-index: 100;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    }
+    .section-collapsed .section-content { display: none; }
+    .section-toggle::before { content: "▼"; display: inline-block; margin-right: 8px; transform: rotate(0deg); transition: transform 0.2s; }
+    .section-collapsed .section-toggle::before { transform: rotate(-90deg); }
+    .tool-checked { background-color: #dbeafe; border-color: #3b82f6; }
+    .tool-denied { background-color: #fee2e2; border-color: #ef4444; text-decoration: line-through; opacity: 0.7; }
+    .tool-alsoallow { background-color: #dcfce7; border-color: #22c55e; }
+  </style>
+</head>
+<body class="p-6 bg-gray-50">
+  <div class="max-w-6xl mx-auto grid gap-6">
+
+    <!-- Header & Add Agent -->
+    <div class="bg-white rounded-2xl shadow-lg p-6 grid gap-4">
+      <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-bold">OpenClaw Agent Builder <span class="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">v2</span></h1>
+      </div>
+      <div class="flex gap-4 items-center">
+        <select id="modeSelect" class="border rounded px-3 py-2 w-40">
+          <option value="agent">Agent</option>
+          <option value="subagent">Sub-Agent</option>
+        </select>
+        <input id="nameInput" placeholder="Agent name (e.g., dev, scout, marco)" class="border rounded px-3 py-2 flex-1">
+        <button onclick="addAgent()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Add</button>
+      </div>
+      <p class="text-sm text-gray-600">💡 Tip: Add all agents first, then configure which agents can message each other.</p>
+    </div>
+
+    <!-- Import Config -->
+    <div class="bg-white rounded-2xl shadow-lg p-6">
+      <h2 class="text-lg font-semibold mb-4">📥 Import Existing Config</h2>
+      <div class="grid md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-2">Upload openclaw.json</label>
+          <input type="file" id="configFile" accept=".json" 
+            class="border rounded px-3 py-2 w-full text-sm mb-2">
+          <button onclick="loadConfigFromFile()" class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">Load File</button>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-2">Or paste config JSON</label>
+          <textarea id="configPaste" 
+            class="border rounded px-3 py-2 w-full text-sm h-20" placeholder='{"agents": {"defaults": {...}, "list": [...]}}'></textarea>
+          <button onclick="loadConfigFromPaste()" class="mt-2 bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">Import Pasted Config</button>
+        </div>
+      </div>
+      <p class="text-xs text-gray-500 mt-2">Import an existing config to edit. Changes will update the generated output below.</p>
+    </div>
+
+    <!-- Global Defaults -->
+    <div class="bg-white rounded-2xl shadow-lg p-6">
+      <h2 class="text-lg font-semibold mb-4 cursor-pointer section-toggle" onclick="toggleSection(this)">Global Defaults</h2>
+      <div class="section-content grid md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">Default Model</label>
+          <input id="defaultModel" value="openrouter/minimax/minimax-m2.5" onchange="render()"
+            class="border rounded px-3 py-2 w-full" placeholder="openrouter/minimax/minimax-m2.5">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Allowed Models (comma-separated)</label>
+          <input id="allowedModels" onchange="render()"
+            class="border rounded px-3 py-2 w-full" placeholder="Leave empty for all">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Thinking</label>
+          <select id="defaultThinking" onchange="render()" class="border rounded px-3 py-2 w-full">
+            <option value="medium">medium</option>
+            <option value="quick">quick</option>
+            <option value="off">off</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Session Timeout (seconds)</label>
+          <input id="sessionTimeout" type="number" value="300" onchange="render()"
+            class="border rounded px-3 py-2 w-full">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Max Turns (0 = unlimited)</label>
+          <input id="maxTurns" type="number" value="0" onchange="render()"
+            class="border rounded px-3 py-2 w-full">
+        </div>
+        <div class="flex items-center">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="skipBootstrap" onchange="render()">
+            <span class="text-sm">Skip Bootstrap Files</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- All Agents List (for allowlist selection) -->
+    <div id="agentsList" class="bg-blue-50 rounded-xl p-4">
+      <h3 class="font-semibold mb-2">Available Agents (for allowlists):</h3>
+      <div id="agentTags" class="flex flex-wrap gap-2"></div>
+    </div>
+
+    <!-- Agent Cards Container -->
+    <div id="agentsContainer"></div>
+
+    <!-- Generated Config -->
+    <div class="bg-white rounded-2xl shadow-lg p-6">
+      <div class="flex justify-between items-center mb-2">
+        <h2 class="text-lg font-semibold">Generated openclaw.json</h2>
+        <div class="flex gap-2">
+          <button onclick="showDiff()" class="text-sm text-purple-600 hover:text-purple-800">🔍 Show Diff</button>
+          <button onclick="copyConfig()" class="text-sm text-blue-600 hover:text-blue-800">📋 Copy</button>
+        </div>
+      </div>
+      <pre id="configOutput" class="bg-gray-100 p-4 rounded text-sm overflow-auto max-h-96"></pre>
+      <div id="diffOutput" class="hidden mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded"></div>
+    </div>
+
+    <!-- Generated Mkdir -->
+    <div class="bg-white rounded-2xl shadow-lg p-6">
+      <h2 class="text-lg font-semibold mb-2">Mac zsh mkdir Patch</h2>
+      <pre id="mkdirOutput" class="bg-gray-100 p-4 rounded text-sm overflow-auto max-h-48"></pre>
+    </div>
+
+  </div>
+
+  <script>
+    // Tool definitions - REAL OpenClaw tool names only
+    const TOOL_INFO = {
+      // File System
+      "read": "Read files from workspace (read_file, glob, etc.)",
+      "write": "Create or overwrite files",
+      "edit": "Make precise edits to files",
+      "glob": "Find files by pattern",
+      "apply_patch": "Apply patch files to code",
+      
+      // Execution
+      "exec": "Run shell commands (full system access)",
+      "exec:host": "Run commands on host machine. HIGH RISK.",
+      "exec:sandbox": "Run commands in sandboxed environment.",
+      
+      // Sessions
+      "sessions_spawn": "Create new agent sessions.",
+      "sessions_send": "Send messages to other sessions.",
+      "sessions_list": "List available sessions.",
+      "sessions_history": "Fetch message history.",
+      "session_status": "Check session status, override models.",
+      
+      // Web
+      "web_search": "Search the web using Brave Search API.",
+      "web_fetch": "Fetch and extract readable content from URLs.",
+      "browser": "Control web browser for automation.",
+      
+      // Messaging
+      "message": "Send messages via configured channels.",
+      
+      // Scheduling
+      "cron": "Create and manage scheduled jobs.",
+      
+      // Paired Devices
+      "nodes": "Control paired devices (camera, screen, location).",
+      
+      // Memory
+      "memory_search": "Search workspace memory files.",
+      "memory_get": "Get specific memory snippets.",
+      
+      // Skills
+      "skills.list": "List available skills.",
+      "skills.invoke": "Load and invoke a skill.",
+      
+      // Gateway
+      "gateway": "Gateway control (restart, config, update).",
+      
+      // MCP
+      "mcporter": "MCP server tools.",
+      
+      // Canvas
+      "canvas": "Canvas UI control.",
+      
+      // TTS
+      "tts": "Text-to-speech conversion.",
+    };
+
+    // Tool profiles - what each profile includes
+    const TOOL_PROFILES = {
+      "": { name: "None (manual)", tools: [] },
+      "minimal": { name: "Minimal", tools: ["read"] },
+      "coding": { name: "Coding", tools: ["read", "write", "edit", "glob", "exec", "exec:sandbox", "apply_patch"] },
+      "messaging": { name: "Messaging", tools: ["message", "sessions_send", "sessions_list"] },
+      "full": { name: "Full", tools: Object.keys(TOOL_INFO) }
+    };
+
+    // Steering & Streaming options
+    const QUEUE_MODES = [
+      { value: "steer", desc: "Inject messages into current run, skip remaining tool calls" },
+      { value: "followup", desc: "Hold messages until turn ends, then start new turn" },
+      { value: "collect", desc: "Collect messages, apply debounce/cap, then process" }
+    ];
+
+    const BLOCK_BREAKS = [
+      { value: "text_end", desc: "Break at end of text blocks" },
+      { value: "message_end", desc: "Break at end of entire message" }
+    ];
+
+    const ALL_TOOLS = Object.keys(TOOL_INFO);
+
+    // Skill list
+    const AVAILABLE_SKILLS = [
+      "github", "gog", "healthcheck", "mcporter", "skill-creator", "weather"
+    ];
+
+    // Channel list
+    const AVAILABLE_CHANNELS = [
+      "telegram", "whatsapp", "discord", "signal", "irc", "googlechat", "slack", "webchat"
+    ];
+
+    let agents = [];
+    let originalFullConfig = null; // Stores full config on import for preservation
+
+    function toggleSection(btn) {
+      btn.parentElement.classList.toggle('section-collapsed');
+    }
+
+    function addAgent() {
+      const name = document.getElementById('nameInput').value.trim();
+      if (!name) return;
+      const mode = document.getElementById('modeSelect').value;
+      const id = name.toLowerCase().replace(/\s+/g, '-');
+
+      if (agents.find(a => a.id === id)) {
+        alert('Agent "' + id + '" already exists');
+        return;
+      }
+
+      agents.push({
+        id, type: mode,
+        workspace: `~/.openclaw/workspace-${id}`,
+        agentDir: `~/.openclaw/agents/${id}/agent`,
+        
+        // Basic info
+        name: "",
+        isDefault: false,
+        
+        // Model settings
+        model: "",
+        models: [],
+        
+        // Identity (for display in chats)
+        identityName: "",
+        
+        // Agent messaging
+        canMessage: [],
+        
+        // Subagents
+        allowSubagents: [],
+        
+        // Tools - new structure
+        toolProfile: "",  // profile name
+        toolsAlsoAllow: [], // extra tools beyond profile
+        toolsDeny: [],    // tools to deny from profile
+        
+        // Skills
+        skills: [],
+        
+        // Sandbox
+        sandbox: { mode: mode === "subagent" ? "all" : "off", scope: "agent", docker: { setupCommand: "" } },
+        
+        // Group chat mention patterns
+        mentionPatterns: [],
+        
+        // Steering & Streaming
+        queueMode: "followup",
+        blockStreaming: false,
+        blockStreamingBreak: "text_end",
+        blockStreamingChunk: "800-1200",
+        blockStreamingCoalesce: false,
+        
+        // Session settings
+        thinking: "",
+        sessionTimeout: "",
+        maxTurns: "",
+        
+        // Channels
+        channels: [],
+        
+        // Skip bootstrap
+        skipBootstrap: false
+      });
+
+      document.getElementById('nameInput').value = '';
+      render();
+    }
+
+    function updateAgent(index, key, value) {
+      agents[index][key] = value;
+      render();
+    }
+
+    // Get tools effective for an agent (profile + alsoAllow - deny)
+    function getEffectiveTools(agent) {
+      const profile = TOOL_PROFILES[agent.toolProfile];
+      const profileTools = profile ? profile.tools : [];
+      
+      // Combine: profile tools + alsoAllow - deny
+      const combined = new Set([...profileTools, ...agent.toolsAlsoAllow]);
+      agent.toolsDeny.forEach(t => combined.delete(t));
+      
+      return Array.from(combined);
+    }
+
+    // Set tool profile - clears previous state and applies new profile
+    function setToolProfile(index, profile) {
+      agents[index].toolProfile = profile;
+      agents[index].toolsAlsoAllow = [];
+      agents[index].toolsDeny = [];
+      render();
+    }
+
+    // Toggle tool in alsoAllow - if tool is in profile, add to deny instead
+    function toggleAlsoAllow(index, tool) {
+      const agent = agents[index];
+      const profile = TOOL_PROFILES[agent.toolProfile];
+      const isProfileTool = profile && profile.tools.includes(tool);
+      
+      if (isProfileTool) {
+        // If tool is in profile, toggle deny instead
+        const arr = agent.toolsDeny;
+        if (arr.includes(tool)) {
+          agent.toolsDeny = arr.filter(t => t !== tool);
+        } else {
+          agent.toolsDeny = [...arr, tool];
+        }
+      } else {
+        // If not in profile, toggle alsoAllow
+        const arr = agent.toolsAlsoAllow;
+        if (arr.includes(tool)) {
+          agent.toolsAlsoAllow = arr.filter(t => t !== tool);
+        } else {
+          agent.toolsAlsoAllow = [...arr, tool];
+        }
+      }
+      render();
+    }
+
+    // Toggle tool in deny list
+    function toggleToolDeny(index, tool) {
+      const arr = agents[index].toolsDeny;
+      if (arr.includes(tool)) {
+        agents[index].toolsDeny = arr.filter(t => t !== tool);
+      } else {
+        agents[index].toolsDeny = [...arr, tool];
+      }
+      render();
+    }
+
+    function toggleSkill(index, skill) {
+      const skills = agents[index].skills || [];
+      if (skills.includes(skill)) {
+        agents[index].skills = skills.filter(s => s !== skill);
+      } else {
+        agents[index].skills = [...skills, skill];
+      }
+      render();
+    }
+
+    function toggleChannel(index, channel) {
+      const channels = agents[index].channels || [];
+      if (channels.includes(channel)) {
+        agents[index].channels = channels.filter(c => c !== channel);
+      } else {
+        agents[index].channels = [...channels, channel];
+      }
+      render();
+    }
+
+    function toggleCanMessage(index, targetId) {
+      const canMessage = agents[index].canMessage || [];
+      if (canMessage.includes(targetId)) {
+        agents[index].canMessage = canMessage.filter(id => id !== targetId);
+      } else {
+        agents[index].canMessage = [...canMessage, targetId];
+      }
+      render();
+    }
+
+    function toggleAllowSubagent(index, subagentId) {
+      const allowList = agents[index].allowSubagents;
+      if (allowList.includes(subagentId)) {
+        agents[index].allowSubagents = allowList.filter(a => a !== subagentId);
+      } else {
+        agents[index].allowSubagents = [...allowList, subagentId];
+      }
+      render();
+    }
+
+    function updateSandbox(index, field, value) {
+      if (!agents[index].sandbox) agents[index].sandbox = { mode: "off", scope: "agent", docker: { setupCommand: "" } };
+      if (field === 'setupCommand') {
+        if (!agents[index].sandbox.docker) agents[index].sandbox.docker = {};
+        agents[index].sandbox.docker.setupCommand = value;
+      } else {
+        agents[index].sandbox[field] = value;
+      }
+      render();
+    }
+
+    function updateSteering(index, field, value) {
+      agents[index][field] = value;
+      if (field === 'blockStreaming' && !value) {
+        agents[index].blockStreamingBreak = "text_end";
+        agents[index].blockStreamingChunk = "800-1200";
+        agents[index].blockStreamingCoalesce = false;
+      }
+      render();
+    }
+
+    function deleteAgent(index) {
+      agents.splice(index, 1);
+      render();
+    }
+
+    function buildConfig() {
+      const defaultModel = document.getElementById('defaultModel').value.trim();
+      const allowedModels = document.getElementById('allowedModels').value.trim();
+      const thinking = document.getElementById('defaultThinking').value;
+      const sessionTimeout = parseInt(document.getElementById('sessionTimeout').value) || 0;
+      const maxTurns = parseInt(document.getElementById('maxTurns').value) || 0;
+      const skipBootstrap = document.getElementById('skipBootstrap').checked;
+
+      // Start with full original config if imported, otherwise create fresh
+      let config = originalFullConfig ? JSON.parse(JSON.stringify(originalFullConfig)) : {};
+      if (!config.agents) config.agents = {};
+      config.agents.defaults = config.agents.defaults || {};
+      config.agents.list = config.agents.list || [];
+
+      // Build defaults - use correct field names per docs
+      if (defaultModel) {
+        config.agents.defaults.model = { primary: defaultModel };
+        if (allowedModels) {
+          config.agents.defaults.models = {};
+          allowedModels.split(',').map(m => m.trim()).filter(m => m).forEach(m => {
+            config.agents.defaults.models[m] = {};
+          });
+        }
+      }
+      if (thinking && thinking !== 'medium') config.agents.defaults.thinkingDefault = thinking;
+      if (sessionTimeout > 0) config.agents.defaults.timeoutSeconds = sessionTimeout;
+      if (maxTurns > 0) config.agents.defaults.maxTurns = maxTurns;
+      if (skipBootstrap) config.agents.defaults.skipBootstrap = true;
+
+      // Build agent list
+      config.agents.list = agents.map(a => {
+        const agentConfig = {
+          id: a.id,
+          workspace: a.workspace
+        };
+
+        // Basic info
+        if (a.name) agentConfig.name = a.name;
+        if (a.isDefault) agentConfig.default = true;
+        
+        // Identity
+        if (a.identityName) {
+          agentConfig.identity = { name: a.identityName };
+        }
+
+        // agentDir (only if non-default)
+        if (a.agentDir !== `~/.openclaw/agents/${a.id}/agent`) {
+          agentConfig.agentDir = a.agentDir;
+        }
+
+        // Model overrides - use object format per docs
+        if (a.model) {
+          agentConfig.model = { 
+            primary: a.model,
+            fallbacks: a.models || []
+          };
+        } else if (a.models && a.models.length) {
+          // If only fallbacks specified, use global model as primary
+          const globalModel = document.getElementById('defaultModel').value.trim();
+          agentConfig.model = {
+            primary: globalModel,
+            fallbacks: a.models
+          };
+        }
+
+        // Thinking override
+        if (a.thinking) agentConfig.thinking = a.thinking;
+
+        // Session settings overrides
+        if (a.sessionTimeout) agentConfig.sessionTimeout = parseInt(a.sessionTimeout);
+        if (a.maxTurns) agentConfig.maxTurns = parseInt(a.maxTurns);
+
+        // Skip bootstrap override
+        if (a.skipBootstrap) agentConfig.skipBootstrap = true;
+
+        // Tools configuration
+        const effectiveTools = getEffectiveTools(a);
+        const hasExplicitTools = a.toolProfile || a.toolsAlsoAllow.length || a.toolsDeny.length;
+        
+        if (hasExplicitTools) {
+          agentConfig.tools = {};
+          
+          // Add profile if selected
+          if (a.toolProfile) {
+            agentConfig.tools.profile = a.toolProfile;
+          }
+          
+          // Add alsoAllow if any
+          if (a.toolsAlsoAllow.length) {
+            agentConfig.tools.alsoAllow = a.toolsAlsoAllow;
+          }
+          
+          // Add deny if any
+          if (a.toolsDeny.length) {
+            agentConfig.tools.deny = a.toolsDeny;
+          }
+          
+          // If profile is empty but we have alsoAllow/deny, use allow
+          if (!a.toolProfile && (a.toolsAlsoAllow.length || a.toolsDeny.length)) {
+            agentConfig.tools.allow = effectiveTools;
+          }
+        }
+
+        // Skills
+        if (a.skills && a.skills.length) {
+          agentConfig.skills = { allow: a.skills };
+        }
+
+        // Channels
+        if (a.channels && a.channels.length) {
+          agentConfig.channels = { allow: a.channels };
+        }
+
+        // Agent-to-agent messaging
+        if (a.canMessage && a.canMessage.length) {
+          agentConfig.sessionTargets = { allow: a.canMessage };
+        }
+
+        // Subagents
+        if (a.type === 'agent') {
+          if (a.allowSubagents && a.allowSubagents.length) {
+            agentConfig.subagents = { allowAgents: a.allowSubagents };
+          }
+          if (a.sandbox && a.sandbox.mode !== "off") {
+            const sandboxConfig = { mode: a.sandbox.mode, scope: a.sandbox.scope };
+            if (a.sandbox.docker?.setupCommand) {
+              sandboxConfig.docker = { setupCommand: a.sandbox.docker.setupCommand };
+            }
+            agentConfig.sandbox = sandboxConfig;
+          }
+        }
+
+        // Group chat mention patterns
+        if (a.mentionPatterns && a.mentionPatterns.length) {
+          if (!agentConfig.groupChat) agentConfig.groupChat = {};
+          agentConfig.groupChat.mentionPatterns = a.mentionPatterns;
+        }
+
+        // Steering & Streaming
+        if (a.queueMode && a.queueMode !== 'followup') {
+          agentConfig.queueMode = a.queueMode;
+        }
+        if (a.blockStreaming) {
+          agentConfig.blockStreaming = true;
+          if (a.blockStreamingBreak !== 'text_end') {
+            agentConfig.blockStreamingBreak = a.blockStreamingBreak;
+          }
+          if (a.blockStreamingChunk !== '800-1200') {
+            agentConfig.blockStreamingChunk = a.blockStreamingChunk;
+          }
+          if (a.blockStreamingCoalesce) {
+            agentConfig.blockStreamingCoalesce = true;
+          }
+        }
+
+        return agentConfig;
+      });
+
+      // Clean up empty defaults only if NOT preserving full config
+      if (!originalFullConfig && Object.keys(config.agents.defaults).length === 0) {
+        delete config.agents.defaults;
+      }
+      
+      // If no agents list and no original config, show empty array
+      if (!originalFullConfig && config.agents.list.length === 0) {
+        delete config.agents.list;
+      }
+
+      return JSON.stringify(config, null, 2);
+    }
+
+    function buildMkdir() {
+      return agents.map(a =>
+        `mkdir -p ~/.openclaw/agents/${a.id}/agent\nmkdir -p ~/.openclaw/agents/${a.id}/sessions\nmkdir -p ~/.openclaw/workspace-${a.id}`
+      ).join("\n\n");
+    }
+
+    function copyConfig() {
+      const config = document.getElementById('configOutput').textContent;
+      navigator.clipboard.writeText(config).then(() => {
+        alert('Config copied to clipboard!');
+      });
+    }
+
+    // Simple JSON diff function
+    function showDiff() {
+      const diffOutput = document.getElementById('diffOutput');
+      if (!originalFullConfig) {
+        diffOutput.innerHTML = '<p class="text-gray-600">No original config to compare against. Import a config first to see changes.</p>';
+        diffOutput.classList.remove('hidden');
+        return;
+      }
+      
+      const generated = JSON.parse(document.getElementById('configOutput').textContent);
+      const original = originalFullConfig;
+      
+      // Find differences
+      const differences = [];
+      
+      function compare(path, obj1, obj2) {
+        const keys1 = obj1 ? Object.keys(obj1) : [];
+        const keys2 = obj2 ? Object.keys(obj2) : [];
+        const allKeys = new Set([...keys1, ...keys2]);
+        
+        for (const key of allKeys) {
+          const currentPath = path ? `${path}.${key}` : key;
+          const val1 = obj1 ? obj1[key] : undefined;
+          const val2 = obj2 ? obj2[key] : undefined;
+          
+          if (JSON.stringify(val1) !== JSON.stringify(val2)) {
+            if (val1 !== undefined && val2 === undefined) {
+              differences.push(`- REMOVED: ${currentPath}`);
+            } else if (val1 === undefined && val2 !== undefined) {
+              differences.push(`+ ADDED: ${currentPath}`);
+            } else if (typeof val1 === 'object' && typeof val2 === 'object' && val1 !== null && val2 !== null) {
+              compare(currentPath, val1, val2);
+            } else {
+              differences.push(`~ CHANGED: ${currentPath}`);
+              differences.push(`    was: ${JSON.stringify(val1)}`);
+              differences.push(`    now: ${JSON.stringify(val2)}`);
+            }
+          }
+        }
+      }
+      
+      compare('', original, generated);
+      
+      if (differences.length === 0) {
+        diffOutput.innerHTML = '<p class="text-green-600">No changes from original config.</p>';
+      } else {
+        diffOutput.innerHTML = '<pre class="text-sm overflow-auto">' + differences.join('\n') + '</pre>';
+      }
+      diffOutput.classList.remove('hidden');
+    }
+
+    // Load config from file upload
+    function loadConfigFromFile() {
+      const fileInput = document.getElementById('configFile');
+      const file = fileInput.files[0];
+      if (!file) {
+        alert('Please select a file first');
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const config = JSON.parse(e.target.result);
+          parseAndLoadConfig(config);
+          fileInput.value = '';
+        } catch (err) {
+          alert('Error parsing JSON: ' + err.message);
+        }
+      };
+      reader.onerror = function(err) {
+        alert('Error reading file');
+      };
+      reader.readAsText(file);
+    }
+
+    // Load config from paste textarea
+    function loadConfigFromPaste() {
+      const text = document.getElementById('configPaste').value.trim();
+      if (!text) {
+        alert('Please paste a config JSON first');
+        return;
+      }
+      
+      try {
+        const config = JSON.parse(text);
+        if (!config.agents) {
+          alert('Invalid config: missing agents section');
+          return;
+        }
+        parseAndLoadConfig(config);
+      } catch (err) {
+        alert('Error parsing JSON: ' + err.message);
+      }
+    }
+
+    // Validate config before import
+    function validateConfig(config) {
+      const errors = [];
+      
+      if (!config) {
+        return ['Config is empty or invalid'];
+      }
+      
+      if (!config.agents) {
+        errors.push('Missing "agents" section');
+      } else {
+        if (config.agents.defaults && typeof config.agents.defaults !== 'object') {
+          errors.push('agents.defaults must be an object');
+        }
+        if (config.agents.list !== undefined && !Array.isArray(config.agents.list)) {
+          errors.push('agents.list must be an array');
+        } else if (Array.isArray(config.agents.list)) {
+          config.agents.list.forEach((agent, i) => {
+            if (!agent.id) {
+              errors.push(`Agent at index ${i} is missing an "id" field`);
+            }
+            if (agent.tools && typeof agent.tools !== 'object') {
+              errors.push(`Agent "${agent.id || i}": tools must be an object`);
+            }
+            if (agent.subagents && typeof agent.subagents !== 'object') {
+              errors.push(`Agent "${agent.id || i}": subagents must be an object`);
+            }
+          });
+        }
+      }
+      
+      return errors;
+    }
+
+    // Parse config and populate agents
+    function parseAndLoadConfig(config) {
+      // Validate first
+      const validationErrors = validateConfig(config);
+      if (validationErrors.length > 0) {
+        alert('Invalid config:\n• ' + validationErrors.join('\n• '));
+        return;
+      }
+      
+      // Load global defaults
+      const defaults = config.agents.defaults || {};
+      // Handle model: can be string or { primary: ... }
+      let defaultModelVal = 'openrouter/minimax/minimax-m2.5';
+      if (typeof defaults.model === 'string') {
+        defaultModelVal = defaults.model;
+      } else if (defaults.model?.primary) {
+        defaultModelVal = defaults.model.primary;
+      }
+      document.getElementById('defaultModel').value = defaultModelVal;
+      // Extract allowed models from the models object
+      const allowedModelsList = defaults.models ? Object.keys(defaults.models) : [];
+      document.getElementById('allowedModels').value = allowedModelsList.join(', ');
+      document.getElementById('defaultThinking').value = defaults.thinkingDefault || defaults.thinking || 'medium';
+      document.getElementById('sessionTimeout').value = defaults.timeoutSeconds || defaults.sessionTimeout || 300;
+      document.getElementById('maxTurns').value = defaults.maxTurns || 0;
+      document.getElementById('skipBootstrap').checked = defaults.skipBootstrap || false;
+      
+      const agentList = config.agents.list || [];
+      
+      // Build a set of all subagent IDs (any agent that appears in someone's allowAgents)
+      const subagentIds = new Set();
+      agentList.forEach(a => {
+        if (a.subagents?.allowAgents) {
+          a.subagents.allowAgents.forEach(subId => subagentIds.add(subId));
+        }
+      });
+      
+      // Load agents
+      agents = agentList.map(agentDef => {
+        // Determine type: check multiple sources for type info
+        let isSubagent = false;
+        if (agentDef.type === 'subagent') {
+          isSubagent = true;
+        } else if (agentDef.type === 'agent') {
+          isSubagent = false;
+        } else if (subagentIds.has(agentDef.id)) {
+          // Fallback: if this agent ID appears in someone's subagents.allowAgents, it's a subagent
+          isSubagent = true;
+        } else if (agentDef.id.startsWith('sub-') || agentDef.id.startsWith('worker-')) {
+          // Heuristic: common subagent naming patterns
+          isSubagent = true;
+        }
+        
+        // Parse model - can be string or { primary, fallbacks }
+        let modelVal = '';
+        let modelsVal = [];
+        if (typeof agentDef.model === 'string') {
+          modelVal = agentDef.model;
+        } else if (agentDef.model?.primary) {
+          modelVal = agentDef.model.primary;
+          modelsVal = agentDef.model.fallbacks || [];
+        }
+        
+        // Parse blockStreamingChunk - can be string "800-1200", single number, or object { minChars, maxChars }
+        let blockChunk = "800-1200";
+        if (typeof agentDef.blockStreamingChunk === 'string') {
+          blockChunk = agentDef.blockStreamingChunk;
+        } else if (typeof agentDef.blockStreamingChunk === 'number') {
+          // Single number: treat as max, use default min
+          blockChunk = `800-${agentDef.blockStreamingChunk}`;
+        } else if (agentDef.blockStreamingChunk?.minChars || agentDef.blockStreamingChunk?.maxChars) {
+          const min = agentDef.blockStreamingChunk.minChars || 800;
+          const max = agentDef.blockStreamingChunk.maxChars || 1200;
+          blockChunk = `${min}-${max}`;
+        }
+        
+        // Parse sandbox docker setupCommand
+        let sandboxConfig = agentDef.sandbox || { mode: isSubagent ? "all" : "off", scope: "agent" };
+        if (sandboxConfig.docker?.setupCommand === undefined) {
+          sandboxConfig.docker = { setupCommand: "" };
+        }
+        
+        const agent = {
+          id: agentDef.id,
+          type: isSubagent ? 'subagent' : 'agent',
+          workspace: agentDef.workspace || `~/.openclaw/workspace-${agentDef.id}`,
+          agentDir: agentDef.agentDir || `~/.openclaw/agents/${agentDef.id}/agent`,
+          
+          // Basic info
+          name: agentDef.name || '',
+          isDefault: agentDef.default || false,
+          
+          // Model settings
+          model: modelVal,
+          models: modelsVal,
+          
+          // Identity
+          identityName: agentDef.identity?.name || '',
+          
+          // Agent messaging
+          canMessage: agentDef.sessionTargets?.allow || [],
+          
+          // Subagents
+          allowSubagents: agentDef.subagents?.allowAgents || [],
+          
+          // Tools - parse tools config
+          toolProfile: agentDef.tools?.profile || '',
+          toolsAlsoAllow: agentDef.tools?.alsoAllow || [],
+          toolsDeny: agentDef.tools?.deny || [],
+          
+          // Skills
+          skills: agentDef.skills?.allow || agentDef.skills || [],
+          
+          // Sandbox
+          sandbox: sandboxConfig,
+          
+          // Group chat
+          mentionPatterns: agentDef.groupChat?.mentionPatterns || [],
+          
+          // Steering
+          queueMode: agentDef.queueMode || "followup",
+          blockStreaming: agentDef.blockStreaming || false,
+          blockStreamingBreak: agentDef.blockStreamingBreak || "text_end",
+          blockStreamingChunk: blockChunk,
+          blockStreamingCoalesce: agentDef.blockStreamingCoalesce || false,
+          
+          // Session
+          thinking: agentDef.thinking || '',
+          sessionTimeout: agentDef.timeoutSeconds || '',
+          maxTurns: agentDef.maxTurns || '',
+          
+          // Channels
+          channels: agentDef.channels?.allow || [],
+          
+          // Skip bootstrap
+          skipBootstrap: agentDef.skipBootstrap || false
+        };
+        
+        return agent;
+      });
+      
+      // Clear the paste input
+      document.getElementById('configPaste').value = '';
+      document.getElementById('configFile').value = '';
+      
+      // Store original full config for preservation on export
+      originalFullConfig = config;
+      
+      render();
+      alert(`Loaded ${agents.length} agent(s) from config!`);
+    }
+
+    function render() {
+      // Update agent tags
+      const agentTags = document.getElementById('agentTags');
+      if (agents.length) {
+        agentTags.innerHTML = agents.map(a =>
+          `<span class="bg-blue-200 px-2 py-1 rounded text-sm">${a.id} (${a.type})</span>`
+        ).join('');
+      } else {
+        agentTags.innerHTML = '<span class="text-gray-500 text-sm">No agents added yet</span>';
+      }
+
+      const container = document.getElementById('agentsContainer');
+      container.innerHTML = agents.map((agent, index) => {
+        const effectiveTools = getEffectiveTools(agent);
+        const profile = TOOL_PROFILES[agent.toolProfile];
+        
+        return `
+        <div class="bg-white rounded-2xl shadow p-6 grid gap-4 fade-in">
+          <div class="flex justify-between items-center">
+            <div>
+              <h2 class="text-xl font-semibold inline-block mr-2">${agent.id}</h2>
+              <span class="text-xs bg-gray-200 px-2 py-1 rounded">${agent.type}</span>
+            </div>
+            <button onclick="deleteAgent(${index})" class="text-red-500 hover:text-red-700 text-sm">Delete</button>
+          </div>
+
+          <!-- Workspace & Agent Dir -->
+          <div class="grid md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium mb-1">Workspace</label>
+              <input value="${agent.workspace}" onchange="updateAgent(${index}, 'workspace', this.value)"
+                class="border rounded px-3 py-2 w-full" placeholder="~/.openclaw/workspace-${agent.id}">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Agent Dir</label>
+              <input value="${agent.agentDir}" onchange="updateAgent(${index}, 'agentDir', this.value)"
+                class="border rounded px-3 py-2 w-full" placeholder="~/.openclaw/agents/${agent.id}/agent">
+            </div>
+          </div>
+
+          <!-- Name & Identity -->
+          <div class="grid md:grid-cols-3 gap-4">
+            <div>
+              <label class="block text-sm font-medium mb-1">Display Name</label>
+              <input value="${agent.name || ''}" onchange="updateAgent(${index}, 'name', this.value)"
+                class="border rounded px-3 py-2 w-full" placeholder="Optional friendly name">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Identity Name</label>
+              <input value="${agent.identityName || ''}" onchange="updateAgent(${index}, 'identityName', this.value)"
+                class="border rounded px-3 py-2 w-full" placeholder="Name shown in chats">
+            </div>
+            <div class="flex items-center mt-6">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" ${agent.isDefault ? 'checked' : ''} onchange="updateAgent(${index}, 'isDefault', this.checked)">
+                <span class="text-sm">Default Agent</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Model Configuration -->
+          <div class="border-t pt-4">
+            <h3 class="font-semibold mb-2 text-sm text-gray-700">🤖 Model</h3>
+            <div class="grid md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Model Override</label>
+                <input value="${agent.model || ''}" onchange="updateAgent(${index}, 'model', this.value)"
+                  class="border rounded px-3 py-2 w-full text-sm" placeholder="Leave empty to use default">
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Allowed Models (comma-separated)</label>
+                <input value="${(agent.models || []).join(', ')}" onchange="updateAgent(${index}, 'models', this.value.split(',').map(m => m.trim()).filter(m => m))"
+                  class="border rounded px-3 py-2 w-full text-sm" placeholder="Leave empty to use default">
+              </div>
+            </div>
+          </div>
+
+          <!-- Session Settings -->
+          <div class="border-t pt-4">
+            <h3 class="font-semibold mb-2 text-sm text-gray-700">⏱️ Session</h3>
+            <div class="grid md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Thinking</label>
+                <select onchange="updateAgent(${index}, 'thinking', this.value)" class="border rounded px-3 py-2 w-full text-sm">
+                  <option value="" ${!agent.thinking ? 'selected' : ''}>Use default</option>
+                  <option value="medium" ${agent.thinking === 'medium' ? 'selected' : ''}>medium</option>
+                  <option value="quick" ${agent.thinking === 'quick' ? 'selected' : ''}>quick</option>
+                  <option value="off" ${agent.thinking === 'off' ? 'selected' : ''}>off</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Timeout (seconds)</label>
+                <input type="number" value="${agent.sessionTimeout || ''}" onchange="updateAgent(${index}, 'sessionTimeout', this.value)"
+                  class="border rounded px-3 py-2 w-full text-sm" placeholder="Use default">
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Max Turns</label>
+                <input type="number" value="${agent.maxTurns || ''}" onchange="updateAgent(${index}, 'maxTurns', this.value)"
+                  class="border rounded px-3 py-2 w-full text-sm" placeholder="Unlimited">
+              </div>
+            </div>
+            <div class="mt-2">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" ${agent.skipBootstrap ? 'checked' : ''} onchange="updateAgent(${index}, 'skipBootstrap', this.checked)">
+                <span class="text-sm">Skip bootstrap files for this agent</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Agent Messaging -->
+          <div class="border-t pt-4">
+            <h3 class="font-semibold mb-2 text-sm text-gray-700">💬 Agent Messaging</h3>
+            <p class="text-xs text-gray-500 mb-2">Select which other agents this agent can send messages to:</p>
+            <div class="flex flex-wrap gap-2">
+              ${agents.length > 1 ? agents.filter(a => a.id !== agent.id).map(a => `
+                <button onclick="toggleCanMessage(${index}, '${a.id}')"
+                  class="px-3 py-1 rounded text-sm border ${(agent.canMessage || []).includes(a.id) ? 'bg-green-100 border-green-500' : 'bg-gray-50 border-gray-300'}">
+                  → ${a.id}
+                </button>
+              `).join('') : '<span class="text-gray-500 text-sm">Add more agents to configure messaging</span>'}
+            </div>
+          </div>
+
+          <!-- Subagents (only for type="agent") -->
+          ${agent.type === 'agent' ? `
+          <div class="border-t pt-4">
+            <h3 class="font-semibold mb-2 text-sm text-gray-700">🧬 Subagents</h3>
+            <p class="text-xs text-gray-500 mb-2">Which subagents can this agent spawn?</p>
+            <div class="flex flex-wrap gap-2 mb-3">
+              ${agents.filter(a => a.type === 'subagent').length ? agents.filter(a => a.type === 'subagent').map(a => `
+                <button onclick="toggleAllowSubagent(${index}, '${a.id}')"
+                  class="px-3 py-1 rounded text-sm border ${agent.allowSubagents.includes(a.id) ? 'bg-green-100 border-green-500' : 'bg-gray-50 border-gray-300'}">
+                  ${a.id}
+                </button>
+              `).join('') : '<span class="text-gray-500 text-sm">Add subagents first</span>'}
+            </div>
+
+            <!-- Sandbox Config -->
+            <div class="p-3 bg-gray-50 rounded">
+              <label class="block text-sm font-medium mb-2">Sandbox Settings</label>
+              <div class="flex gap-4">
+                <div>
+                  <label class="text-xs text-gray-600">Mode</label>
+                  <select onchange="updateSandbox(${index}, 'mode', this.value)"
+                    class="border rounded px-2 py-1 text-sm w-full">
+                    <option value="off" ${!agent.sandbox || agent.sandbox.mode === 'off' ? 'selected' : ''}>off</option>
+                    <option value="all" ${agent.sandbox && agent.sandbox.mode === 'all' ? 'selected' : ''}>all (block dangerous)</option>
+                    <option value="deny" ${agent.sandbox && agent.sandbox.mode === 'deny' ? 'selected' : ''}>deny (allow safe)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs text-gray-600">Scope</label>
+                  <select onchange="updateSandbox(${index}, 'scope', this.value)"
+                    class="border rounded px-2 py-1 text-sm w-full">
+                    <option value="agent" ${!agent.sandbox || agent.sandbox.scope === 'agent' ? 'selected' : ''}>agent (own workspace)</option>
+                    <option value="global" ${agent.sandbox && agent.sandbox.scope === 'global' ? 'selected' : ''}>global (entire system)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="mt-3">
+                <label class="text-xs text-gray-600">Docker Setup Command</label>
+                <input value="${agent.sandbox?.docker?.setupCommand || ''}" onchange="updateSandbox(${index}, 'setupCommand', this.value)"
+                  class="border rounded px-2 py-1 text-sm w-full" placeholder="apt-get update && apt-get install -y git curl">
+              </div>
+            ` : ''}
+
+ </div>
+          </div>
+
+          <!-- Steering & Streaming -->
+          <div class="border-t pt-4">
+            <h3 class="font-semibold mb-2 text-sm text-gray-700">📡 Steering & Streaming</h3>
+            <div class="grid md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Queue Mode</label>
+                <select onchange="updateSteering(${index}, 'queueMode', this.value)" class="border rounded px-3 py-2 w-full text-sm">
+                  <option value="followup" ${agent.queueMode === 'followup' ? 'selected' : ''}>followup (default)</option>
+                  <option value="steer" ${agent.queueMode === 'steer' ? 'selected' : ''}>steer (inject into current run)</option>
+                  <option value="collect" ${agent.queueMode === 'collect' ? 'selected' : ''}>collect (debounce then process)</option>
+                </select>
+              </div>
+              <div class="flex items-center mt-6">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" ${agent.blockStreaming ? 'checked' : ''} onchange="updateSteering(${index}, 'blockStreaming', this.checked)">
+                  <span class="text-sm">Enable Block Streaming</span>
+                </label>
+              </div>
+            </div>
+            
+            ${agent.blockStreaming ? `
+            <div class="mt-3 p-3 bg-yellow-50 rounded border border-yellow-200">
+              <div class="grid md:grid-cols-3 gap-4">
+                <div>
+                  <label class="block text-xs text-gray-600 mb-1">Break At</label>
+                  <select onchange="updateSteering(${index}, 'blockStreamingBreak', this.value)" class="border rounded px-2 py-1 text-sm w-full">
+                    <option value="text_end" ${agent.blockStreamingBreak === 'text_end' ? 'selected' : ''}>text_end</option>
+                    <option value="message_end" ${agent.blockStreamingBreak === 'message_end' ? 'selected' : ''}>message_end</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-600 mb-1">Chunk Size</label>
+                  <input value="${agent.blockStreamingChunk || '800-1200'}" onchange="updateSteering(${index}, 'blockStreamingChunk', this.value)"
+                    class="border rounded px-2 py-1 text-sm w-full" placeholder="800-1200">
+                </div>
+                <div class="flex items-center">
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" ${agent.blockStreamingCoalesce ? 'checked' : ''} onchange="updateSteering(${index}, 'blockStreamingCoalesce', this.checked)">
+                    <span class="text-sm">Coalesce chunks</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+            ` : ''}
+          </div>
+
+          <!-- Skills -->
+          <div class="border-t pt-4">
+            <h3 class="font-semibold mb-2 text-sm text-gray-700">🛠️ Skills</h3>
+            <div class="flex flex-wrap gap-2">
+              ${AVAILABLE_SKILLS.map(skill => `
+                <button onclick="toggleSkill(${index}, '${skill}')"
+                  class="px-3 py-1 rounded text-sm border ${(agent.skills || []).includes(skill) ? 'bg-purple-100 border-purple-500' : 'bg-gray-50 border-gray-300'}">
+                  ${skill}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Channels -->
+          <div class="border-t pt-4">
+            <h3 class="font-semibold mb-2 text-sm text-gray-700">📱 Channels</h3>
+            <div class="flex flex-wrap gap-2">
+              ${AVAILABLE_CHANNELS.map(channel => `
+                <button onclick="toggleChannel(${index}, '${channel}')"
+                  class="px-3 py-1 rounded text-sm border ${(agent.channels || []).includes(channel) ? 'bg-orange-100 border-orange-500' : 'bg-gray-50 border-gray-300'}">
+                  ${channel}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Group Chat -->
+          <div class="border-t pt-4">
+            <h3 class="font-semibold mb-2 text-sm text-gray-700">👥 Group Chat</h3>
+            <div>
+              <label class="block text-sm font-medium mb-1">Mention Patterns (comma-separated)</label>
+              <input value="${(agent.mentionPatterns || []).join(', ')}" onchange="updateAgent(${index}, 'mentionPatterns', this.value.split(',').map(m => m.trim()).filter(m => m))"
+                class="border rounded px-3 py-2 w-full text-sm" placeholder="@openclaw, openclaw, @MyBot">
+              <p class="text-xs text-gray-500 mt-1">Regex patterns to trigger mentions in group chats</p>
+            </div>
+          </div>
+
+          <!-- Tools Section -->
+          <div class="border-t pt-4">
+            <h3 class="font-semibold mb-2 text-sm text-gray-700">🔧 Tools</h3>
+            
+            <!-- Tool Profile Selector -->
+            <div class="mb-4 p-3 bg-blue-50 rounded">
+              <label class="block text-sm font-medium mb-2">Tool Profile</label>
+              <select onchange="setToolProfile(${index}, this.value)" class="border rounded px-3 py-2 w-full text-sm">
+                <option value="" ${!agent.toolProfile ? 'selected' : ''}>None (manual selection)</option>
+                ${Object.entries(TOOL_PROFILES).filter(([k]) => k).map(([key, val]) => `
+                  <option value="${key}" ${agent.toolProfile === key ? 'selected' : ''}>${val.name} (${val.tools.length} tools)</option>
+                `).join('')}
+              </select>
+              ${agent.toolProfile && profile ? `
+                <p class="text-xs text-gray-500 mt-2">Includes: ${profile.tools.join(', ')}</p>
+              ` : ''}
+            </div>
+
+            <!-- Tools - Also Allow / Deny -->
+            <div class="mb-4">
+              <label class="block text-sm font-medium mb-2">
+                ${agent.toolProfile ? 'Click profile tools to DENY, non-profile tools to Also Allow' : 'Also Allow (extra tools beyond profile)'}
+              </label>
+              <div class="flex flex-wrap gap-2">
+                ${ALL_TOOLS.map(tool => {
+                  const isAlsoAllow = agent.toolsAlsoAllow.includes(tool);
+                  const isDenied = agent.toolsDeny.includes(tool);
+                  const isEffective = effectiveTools.includes(tool);
+                  const isProfileTool = profile && profile.tools.includes(tool);
+                  
+                  let classes = "px-3 py-1 rounded text-sm border cursor-pointer ";
+                  if (isAlsoAllow) classes += "tool-alsoallow";
+                  else if (isDenied) classes += "tool-denied";
+                  else if (isEffective) classes += "tool-checked";
+                  else classes += "bg-gray-50 border-gray-300";
+                  
+                  let title = TOOL_INFO[tool];
+                  if (isProfileTool && agent.toolProfile) {
+                    title = "Click to DENY (remove from profile)";
+                  } else if (!isProfileTool) {
+                    title = "Click to Also Allow";
+                  }
+                  
+                  return `<button onclick="toggleAlsoAllow(${index}, '${tool}')" class="${classes}" title="${title}">${tool}</button>`;
+                }).join('')}
+              </div>
+            </div>
+
+            <!-- Deny List -->
+            <div class="mb-4">
+              <label class="block text-sm font-medium mb-2">Deny (remove tools from profile)</label>
+              <div class="flex flex-wrap gap-2">
+                ${ALL_TOOLS.map(tool => {
+                  const isDenied = agent.toolsDeny.includes(tool);
+                  const isProfileTool = profile && profile.tools.includes(tool);
+                  
+                  if (!isProfileTool && !agent.toolProfile) return '';
+                  
+                  let classes = "px-3 py-1 rounded text-sm border cursor-pointer ";
+                  if (isDenied) classes += "tool-denied";
+                  else if (isProfileTool) classes += "bg-gray-50 border-gray-300 hover:bg-red-50";
+                  else return '';
+                  
+                  return `<button onclick="toggleToolDeny(${index}, '${tool}')" class="${classes}" title="${isDenied ? 'Click to remove from deny list' : 'Click to deny this tool'}">${tool}</button>`;
+                }).join('')}
+              </div>
+              ${agent.toolsDeny.length > 0 ? `
+                <p class="text-xs text-red-600 mt-2">Denied: ${agent.toolsDeny.join(', ')}</p>
+              ` : ''}
+            </div>
+
+            <!-- Effective Tools Summary -->
+            <div class="p-3 bg-gray-100 rounded">
+              <label class="block text-sm font-medium mb-1">Effective Tools (${effectiveTools.length}):</label>
+              <p class="text-xs text-gray-600 break-all">${effectiveTools.join(', ')}</p>
+            </div>
+          </div>
+        </div>
+      `}).join('');
+
+      document.getElementById('configOutput').textContent = buildConfig();
+      document.getElementById('mkdirOutput').textContent = buildMkdir();
+    }
+
+    // Handle Enter key in name input
+    document.getElementById('nameInput').addEventListener('keypress', e => {
+      if (e.key === 'Enter') addAgent();
+    });
+
+    render();
+
+    // Auto-import if config was pasted before page load
+    const pastedConfig = document.getElementById('configPaste').value.trim();
+    if (pastedConfig && pastedConfig.startsWith('{')) {
+      try {
+        const config = JSON.parse(pastedConfig);
+        if (config.agents) {
+          parseAndLoadConfig(config);
+        }
+      } catch (e) {
+        // Ignore - will be handled by user clicking import
+      }
+    }
+  </script>
+</body>
+</html>
