@@ -434,7 +434,18 @@
         channels: [],
         
         // Skip bootstrap
-        skipBootstrap: false
+        skipBootstrap: false,
+
+        // System prompt
+        systemPrompt: "",
+
+        // Context files
+        contextFiles: [],
+
+        // Memory
+        memoryEnabled: false,
+        memoryFile: "",
+        memoryMaxTokens: ""
       });
 
       document.getElementById('nameInput').value = '';
@@ -643,6 +654,19 @@
 
         // Skip bootstrap override
         if (a.skipBootstrap) agentConfig.skipBootstrap = true;
+
+        // System prompt
+        if (a.systemPrompt && a.systemPrompt.trim()) agentConfig.systemPrompt = a.systemPrompt.trim();
+
+        // Context files
+        if (a.contextFiles && a.contextFiles.length) agentConfig.contextFiles = a.contextFiles;
+
+        // Memory
+        if (a.memoryEnabled) {
+          agentConfig.memory = { enabled: true };
+          if (a.memoryFile) agentConfig.memory.file = a.memoryFile;
+          if (a.memoryMaxTokens) agentConfig.memory.maxTokens = parseInt(a.memoryMaxTokens);
+        }
 
         // Tools configuration
         const effectiveTools = getEffectiveTools(a);
@@ -1073,9 +1097,20 @@
           channels: agentDef.channels?.allow || [],
           
           // Skip bootstrap
-          skipBootstrap: agentDef.skipBootstrap || false
+          skipBootstrap: agentDef.skipBootstrap || false,
+
+          // System prompt
+          systemPrompt: agentDef.systemPrompt || '',
+
+          // Context files
+          contextFiles: agentDef.contextFiles || [],
+
+          // Memory
+          memoryEnabled: agentDef.memory?.enabled || false,
+          memoryFile: agentDef.memory?.file || '',
+          memoryMaxTokens: agentDef.memory?.maxTokens || ''
         };
-        
+
         return agent;
       });
       
@@ -1241,6 +1276,48 @@
             </div>
           </div>
 
+          <!-- System Prompt -->
+          <div class="border-t pt-4">
+            <h3 class="font-semibold mb-2 text-sm text-gray-700">📝 System Prompt</h3>
+            <textarea rows="4" onchange="updateAgent(${index}, 'systemPrompt', this.value)"
+              class="border rounded px-3 py-2 w-full text-sm" placeholder="Leave empty to use the agent's default system prompt file">${agent.systemPrompt || ''}</textarea>
+            <p class="text-xs text-gray-500 mt-1">Overrides the agent's system prompt file if set</p>
+          </div>
+
+          <!-- Context Files -->
+          <div class="border-t pt-4">
+            <h3 class="font-semibold mb-2 text-sm text-gray-700">📂 Context Files</h3>
+            <input value="${(agent.contextFiles || []).join(', ')}"
+              onchange="updateAgent(${index}, 'contextFiles', this.value.split(',').map(f => f.trim()).filter(f => f))"
+              class="border rounded px-3 py-2 w-full text-sm" placeholder="~/.openclaw/context/rules.md, /path/to/style.md">
+            <p class="text-xs text-gray-500 mt-1">Comma-separated file paths injected as context into every session</p>
+          </div>
+
+          <!-- Memory -->
+          <div class="border-t pt-4">
+            <h3 class="font-semibold mb-2 text-sm text-gray-700">🧠 Memory</h3>
+            <div class="flex flex-col gap-3">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" ${agent.memoryEnabled ? 'checked' : ''} onchange="updateAgent(${index}, 'memoryEnabled', this.checked)">
+                <span class="text-sm">Enable memory for this agent</span>
+              </label>
+              ${agent.memoryEnabled ? `
+              <div class="grid md:grid-cols-2 gap-3 pl-2">
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1">Memory File Path</label>
+                  <input value="${agent.memoryFile || ''}" onchange="updateAgent(${index}, 'memoryFile', this.value)"
+                    class="border rounded px-2 py-1 text-sm w-full" placeholder="~/.openclaw/agents/${agent.id}/memory.md">
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1">Max Tokens</label>
+                  <input type="number" value="${agent.memoryMaxTokens || ''}" onchange="updateAgent(${index}, 'memoryMaxTokens', this.value)"
+                    class="border rounded px-2 py-1 text-sm w-full" placeholder="4096">
+                </div>
+              </div>
+              ` : ''}
+            </div>
+          </div>
+
           <!-- Agent Messaging -->
           <div class="border-t pt-4">
             <h3 class="font-semibold mb-2 text-sm text-gray-700">💬 Agent Messaging</h3>
@@ -1296,10 +1373,9 @@
                 <input value="${agent.sandbox?.docker?.setupCommand || ''}" onchange="updateSandbox(${index}, 'setupCommand', this.value)"
                   class="border rounded px-2 py-1 text-sm w-full" placeholder="apt-get update && apt-get install -y git curl">
               </div>
-            ` : ''}
-
- </div>
+            </div>
           </div>
+          ` : ''}
 
           <!-- Steering & Streaming -->
           <div class="border-t pt-4">
