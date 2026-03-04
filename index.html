@@ -113,6 +113,72 @@
       </div>
     </div>
 
+    <!-- Gateway Configuration -->
+    <div class="bg-white rounded-2xl shadow-lg p-6">
+      <h2 class="text-lg font-semibold mb-4 cursor-pointer section-toggle" onclick="toggleSection(this)">🌐 Gateway Configuration</h2>
+      <div class="section-content grid md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">Port</label>
+          <input id="gatewayPort" type="number" placeholder="8080" onchange="render()"
+            class="border rounded px-3 py-2 w-full">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Host</label>
+          <input id="gatewayHost" placeholder="localhost" onchange="render()"
+            class="border rounded px-3 py-2 w-full">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Auth Token</label>
+          <input id="gatewayAuthToken" type="password" placeholder="secret-token" onchange="render()"
+            class="border rounded px-3 py-2 w-full">
+        </div>
+        <div class="md:col-span-3">
+          <label class="block text-sm font-medium mb-1">Extra Gateway Config (JSON, merged into gateway section)</label>
+          <textarea id="gatewayExtra" rows="3" onchange="render()"
+            class="border rounded px-3 py-2 w-full text-sm font-mono" placeholder='{"cors": true, "rateLimit": 100}'></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Channels Configuration -->
+    <div class="bg-white rounded-2xl shadow-lg p-6">
+      <h2 class="text-lg font-semibold mb-4 cursor-pointer section-toggle" onclick="toggleSection(this)">📡 Channels Configuration</h2>
+      <div class="section-content">
+        <div id="channelConfigsContainer" class="grid gap-4"></div>
+        <div class="mt-4 flex gap-3 items-center">
+          <select id="addChannelType" class="border rounded px-3 py-2">
+            <option value="">Select channel type...</option>
+            <option value="telegram">Telegram</option>
+            <option value="discord">Discord</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="slack">Slack</option>
+            <option value="signal">Signal</option>
+            <option value="irc">IRC</option>
+            <option value="googlechat">Google Chat</option>
+            <option value="webchat">WebChat</option>
+          </select>
+          <button onclick="addChannelConfig()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm">Add Channel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Plugins & Skills Registry -->
+    <div class="bg-white rounded-2xl shadow-lg p-6">
+      <h2 class="text-lg font-semibold mb-4 cursor-pointer section-toggle" onclick="toggleSection(this)">🧩 Plugins & Top-Level Skills</h2>
+      <div class="section-content grid gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">Plugins (JSON array or object)</label>
+          <textarea id="pluginsConfig" rows="4" onchange="render()"
+            class="border rounded px-3 py-2 w-full text-sm font-mono" placeholder='[{"name": "my-plugin", "path": "~/.openclaw/plugins/my-plugin"}]'></textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Skills Registry (JSON object)</label>
+          <textarea id="skillsConfig" rows="4" onchange="render()"
+            class="border rounded px-3 py-2 w-full text-sm font-mono" placeholder='{"my-skill": {"path": "~/.openclaw/skills/my-skill", "description": "Does something"}}'></textarea>
+        </div>
+      </div>
+    </div>
+
     <!-- All Agents List (for allowlist selection) -->
     <div id="agentsList" class="bg-blue-50 rounded-xl p-4">
       <h3 class="font-semibold mb-2">Available Agents (for allowlists):</h3>
@@ -236,6 +302,71 @@
     let agents = [];
     let originalFullConfig = null; // Stores full config on import for preservation
 
+    // Channel configuration fields per channel type
+    const CHANNEL_FIELDS = {
+      "telegram":   [{ key: "token", label: "Bot Token", type: "password" }, { key: "allowedChats", label: "Allowed Chat IDs (comma-separated)", type: "text" }, { key: "groupChat", label: "Enable Group Chat", type: "checkbox" }],
+      "discord":    [{ key: "token", label: "Bot Token", type: "password" }, { key: "guildId", label: "Guild/Server ID", type: "text" }, { key: "groupChat", label: "Enable Group Chat", type: "checkbox" }],
+      "whatsapp":   [{ key: "sessionFile", label: "Session File Path", type: "text" }, { key: "allowedNumbers", label: "Allowed Numbers (comma-separated)", type: "text" }],
+      "slack":      [{ key: "token", label: "Bot Token", type: "password" }, { key: "appToken", label: "App Token", type: "password" }, { key: "signingSecret", label: "Signing Secret", type: "password" }],
+      "signal":     [{ key: "number", label: "Signal Number", type: "text" }, { key: "allowedNumbers", label: "Allowed Numbers (comma-separated)", type: "text" }],
+      "irc":        [{ key: "server", label: "Server", type: "text" }, { key: "port", label: "Port", type: "number" }, { key: "nick", label: "Nick", type: "text" }, { key: "channel", label: "Channel", type: "text" }],
+      "googlechat": [{ key: "projectId", label: "Project ID", type: "text" }, { key: "keyFile", label: "Key File Path", type: "text" }, { key: "space", label: "Space Name", type: "text" }],
+      "webchat":    [{ key: "port", label: "Port", type: "number" }, { key: "secret", label: "Secret", type: "password" }, { key: "allowedOrigins", label: "Allowed Origins (comma-separated)", type: "text" }],
+    };
+
+    // Channel configs: array of { type, ...fields }
+    let channelConfigs = [];
+
+    function addChannelConfig() {
+      const type = document.getElementById('addChannelType').value;
+      if (!type) return alert('Please select a channel type first');
+      if (channelConfigs.find(c => c.type === type)) return alert(`Channel "${type}" already added`);
+      channelConfigs.push({ type, _extra: '' });
+      document.getElementById('addChannelType').value = '';
+      renderChannelConfigs();
+      render();
+    }
+
+    function removeChannelConfig(type) {
+      channelConfigs = channelConfigs.filter(c => c.type !== type);
+      renderChannelConfigs();
+      render();
+    }
+
+    function updateChannelField(type, key, value) {
+      const ch = channelConfigs.find(c => c.type === type);
+      if (ch) { ch[key] = value; render(); }
+    }
+
+    function renderChannelConfigs() {
+      const container = document.getElementById('channelConfigsContainer');
+      if (!channelConfigs.length) {
+        container.innerHTML = '<p class="text-sm text-gray-500">No channels configured. Add one below.</p>';
+        return;
+      }
+      container.innerHTML = channelConfigs.map(ch => {
+        const fields = CHANNEL_FIELDS[ch.type] || [];
+        return `
+          <div class="border rounded p-4 bg-gray-50">
+            <div class="flex justify-between items-center mb-3">
+              <h3 class="font-semibold text-sm capitalize">${ch.type}</h3>
+              <button onclick="removeChannelConfig('${ch.type}')" class="text-red-500 hover:text-red-700 text-sm">Remove</button>
+            </div>
+            <div class="grid md:grid-cols-2 gap-3">
+              ${fields.map(f => {
+                if (f.type === 'checkbox') {
+                  return `<div class="flex items-center"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" ${ch[f.key] ? 'checked' : ''} onchange="updateChannelField('${ch.type}', '${f.key}', this.checked)"><span class="text-sm">${f.label}</span></label></div>`;
+                }
+                const val = ch[f.key] || '';
+                return `<div><label class="block text-xs text-gray-500 mb-1">${f.label}</label><input type="${f.type}" value="${val}" onchange="updateChannelField('${ch.type}', '${f.key}', this.value)" class="border rounded px-2 py-1 text-sm w-full" placeholder="${f.label}"></div>`;
+              }).join('')}
+              <div class="md:col-span-2"><label class="block text-xs text-gray-500 mb-1">Extra Config (JSON, merged)</label><input value="${ch._extra || ''}" onchange="updateChannelField('${ch.type}', '_extra', this.value)" class="border rounded px-2 py-1 text-sm w-full font-mono" placeholder='{"webhookUrl": "..."}'></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
     function toggleSection(btn) {
       btn.parentElement.classList.toggle('section-collapsed');
     }
@@ -303,7 +434,18 @@
         channels: [],
         
         // Skip bootstrap
-        skipBootstrap: false
+        skipBootstrap: false,
+
+        // System prompt
+        systemPrompt: "",
+
+        // Context files
+        contextFiles: [],
+
+        // Memory
+        memoryEnabled: false,
+        memoryFile: "",
+        memoryMaxTokens: ""
       });
 
       document.getElementById('nameInput').value = '';
@@ -507,11 +649,24 @@
         if (a.thinking) agentConfig.thinking = a.thinking;
 
         // Session settings overrides
-        if (a.sessionTimeout) agentConfig.sessionTimeout = parseInt(a.sessionTimeout);
+        if (a.sessionTimeout) agentConfig.timeoutSeconds = parseInt(a.sessionTimeout);
         if (a.maxTurns) agentConfig.maxTurns = parseInt(a.maxTurns);
 
         // Skip bootstrap override
         if (a.skipBootstrap) agentConfig.skipBootstrap = true;
+
+        // System prompt
+        if (a.systemPrompt && a.systemPrompt.trim()) agentConfig.systemPrompt = a.systemPrompt.trim();
+
+        // Context files
+        if (a.contextFiles && a.contextFiles.length) agentConfig.contextFiles = a.contextFiles;
+
+        // Memory
+        if (a.memoryEnabled) {
+          agentConfig.memory = { enabled: true };
+          if (a.memoryFile) agentConfig.memory.file = a.memoryFile;
+          if (a.memoryMaxTokens) agentConfig.memory.maxTokens = parseInt(a.memoryMaxTokens);
+        }
 
         // Tools configuration
         const effectiveTools = getEffectiveTools(a);
@@ -600,10 +755,65 @@
       if (!originalFullConfig && Object.keys(config.agents.defaults).length === 0) {
         delete config.agents.defaults;
       }
-      
+
       // If no agents list and no original config, show empty array
       if (!originalFullConfig && config.agents.list.length === 0) {
         delete config.agents.list;
+      }
+
+      // Build gateway section
+      const gatewayPort = document.getElementById('gatewayPort').value.trim();
+      const gatewayHost = document.getElementById('gatewayHost').value.trim();
+      const gatewayAuthToken = document.getElementById('gatewayAuthToken').value.trim();
+      const gatewayExtraRaw = document.getElementById('gatewayExtra').value.trim();
+      if (gatewayPort || gatewayHost || gatewayAuthToken || gatewayExtraRaw) {
+        let gatewayExtra = {};
+        if (gatewayExtraRaw) { try { gatewayExtra = JSON.parse(gatewayExtraRaw); } catch(e) {} }
+        config.gateway = Object.assign({}, config.gateway || {}, gatewayExtra);
+        if (gatewayPort) config.gateway.port = parseInt(gatewayPort);
+        if (gatewayHost) config.gateway.host = gatewayHost;
+        if (gatewayAuthToken) config.gateway.auth = Object.assign({}, (config.gateway.auth || {}), { token: gatewayAuthToken });
+      }
+
+      // Build top-level channels section
+      if (channelConfigs.length > 0) {
+        if (!config.channels) config.channels = {};
+        channelConfigs.forEach(ch => {
+          const { type, _extra, ...fields } = ch;
+          let extra = {};
+          if (_extra) { try { extra = JSON.parse(_extra); } catch(e) {} }
+          const chObj = Object.assign({}, config.channels[type] || {}, extra);
+          const channelFieldDefs = CHANNEL_FIELDS[type] || [];
+          channelFieldDefs.forEach(f => {
+            if (fields[f.key] !== undefined && fields[f.key] !== '' && fields[f.key] !== false) {
+              if (f.type === 'checkbox') {
+                if (fields[f.key]) chObj[f.key] = true;
+              } else if (f.type === 'number') {
+                if (fields[f.key]) chObj[f.key] = parseInt(fields[f.key]);
+              } else if (f.key === 'allowedChats' || f.key === 'allowedNumbers') {
+                const vals = String(fields[f.key]).split(',').map(v => v.trim()).filter(v => v);
+                if (vals.length) chObj[f.key] = vals.map(v => isNaN(v) ? v : parseInt(v));
+              } else if (f.key === 'allowedOrigins') {
+                chObj[f.key] = String(fields[f.key]).split(',').map(v => v.trim()).filter(v => v);
+              } else {
+                chObj[f.key] = fields[f.key];
+              }
+            }
+          });
+          config.channels[type] = chObj;
+        });
+      }
+
+      // Build plugins section
+      const pluginsRaw = document.getElementById('pluginsConfig').value.trim();
+      if (pluginsRaw) {
+        try { config.plugins = JSON.parse(pluginsRaw); } catch(e) {}
+      }
+
+      // Build skills registry section
+      const skillsRaw = document.getElementById('skillsConfig').value.trim();
+      if (skillsRaw) {
+        try { config.skills = JSON.parse(skillsRaw); } catch(e) {}
       }
 
       return JSON.stringify(config, null, 2);
@@ -887,24 +1097,77 @@
           channels: agentDef.channels?.allow || [],
           
           // Skip bootstrap
-          skipBootstrap: agentDef.skipBootstrap || false
+          skipBootstrap: agentDef.skipBootstrap || false,
+
+          // System prompt
+          systemPrompt: agentDef.systemPrompt || '',
+
+          // Context files
+          contextFiles: agentDef.contextFiles || [],
+
+          // Memory
+          memoryEnabled: agentDef.memory?.enabled || false,
+          memoryFile: agentDef.memory?.file || '',
+          memoryMaxTokens: agentDef.memory?.maxTokens || ''
         };
-        
+
         return agent;
       });
       
       // Clear the paste input
       document.getElementById('configPaste').value = '';
       document.getElementById('configFile').value = '';
-      
+
+      // Load gateway config
+      const gw = config.gateway || {};
+      document.getElementById('gatewayPort').value = gw.port || '';
+      document.getElementById('gatewayHost').value = gw.host || '';
+      document.getElementById('gatewayAuthToken').value = gw.auth?.token || '';
+      // Extra gateway fields (exclude known ones)
+      const { port: _gwPort, host: _gwHost, auth: _gwAuth, ...gwExtra } = gw;
+      document.getElementById('gatewayExtra').value = Object.keys(gwExtra).length ? JSON.stringify(gwExtra, null, 2) : '';
+
+      // Load channel configs
+      channelConfigs = [];
+      if (config.channels && typeof config.channels === 'object') {
+        Object.entries(config.channels).forEach(([type, chData]) => {
+          if (!chData || typeof chData !== 'object') return;
+          const fieldDefs = CHANNEL_FIELDS[type] || [];
+          const knownKeys = fieldDefs.map(f => f.key);
+          const ch = { type, _extra: '' };
+          fieldDefs.forEach(f => {
+            if (chData[f.key] !== undefined) {
+              if (f.key === 'allowedChats' || f.key === 'allowedNumbers') {
+                ch[f.key] = Array.isArray(chData[f.key]) ? chData[f.key].join(', ') : chData[f.key];
+              } else if (f.key === 'allowedOrigins') {
+                ch[f.key] = Array.isArray(chData[f.key]) ? chData[f.key].join(', ') : chData[f.key];
+              } else {
+                ch[f.key] = chData[f.key];
+              }
+            }
+          });
+          const extraFields = Object.entries(chData).filter(([k]) => !knownKeys.includes(k));
+          if (extraFields.length) ch._extra = JSON.stringify(Object.fromEntries(extraFields), null, 2);
+          channelConfigs.push(ch);
+        });
+      }
+      renderChannelConfigs();
+
+      // Load plugins & skills
+      document.getElementById('pluginsConfig').value = config.plugins ? JSON.stringify(config.plugins, null, 2) : '';
+      document.getElementById('skillsConfig').value = config.skills ? JSON.stringify(config.skills, null, 2) : '';
+
       // Store original full config for preservation on export
       originalFullConfig = config;
-      
+
       render();
       alert(`Loaded ${agents.length} agent(s) from config!`);
     }
 
     function render() {
+      // Ensure channel config UI is rendered
+      renderChannelConfigs();
+
       // Update agent tags
       const agentTags = document.getElementById('agentTags');
       if (agents.length) {
@@ -1013,6 +1276,48 @@
             </div>
           </div>
 
+          <!-- System Prompt -->
+          <div class="border-t pt-4">
+            <h3 class="font-semibold mb-2 text-sm text-gray-700">📝 System Prompt</h3>
+            <textarea rows="4" onchange="updateAgent(${index}, 'systemPrompt', this.value)"
+              class="border rounded px-3 py-2 w-full text-sm" placeholder="Leave empty to use the agent's default system prompt file">${agent.systemPrompt || ''}</textarea>
+            <p class="text-xs text-gray-500 mt-1">Overrides the agent's system prompt file if set</p>
+          </div>
+
+          <!-- Context Files -->
+          <div class="border-t pt-4">
+            <h3 class="font-semibold mb-2 text-sm text-gray-700">📂 Context Files</h3>
+            <input value="${(agent.contextFiles || []).join(', ')}"
+              onchange="updateAgent(${index}, 'contextFiles', this.value.split(',').map(f => f.trim()).filter(f => f))"
+              class="border rounded px-3 py-2 w-full text-sm" placeholder="~/.openclaw/context/rules.md, /path/to/style.md">
+            <p class="text-xs text-gray-500 mt-1">Comma-separated file paths injected as context into every session</p>
+          </div>
+
+          <!-- Memory -->
+          <div class="border-t pt-4">
+            <h3 class="font-semibold mb-2 text-sm text-gray-700">🧠 Memory</h3>
+            <div class="flex flex-col gap-3">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" ${agent.memoryEnabled ? 'checked' : ''} onchange="updateAgent(${index}, 'memoryEnabled', this.checked)">
+                <span class="text-sm">Enable memory for this agent</span>
+              </label>
+              ${agent.memoryEnabled ? `
+              <div class="grid md:grid-cols-2 gap-3 pl-2">
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1">Memory File Path</label>
+                  <input value="${agent.memoryFile || ''}" onchange="updateAgent(${index}, 'memoryFile', this.value)"
+                    class="border rounded px-2 py-1 text-sm w-full" placeholder="~/.openclaw/agents/${agent.id}/memory.md">
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1">Max Tokens</label>
+                  <input type="number" value="${agent.memoryMaxTokens || ''}" onchange="updateAgent(${index}, 'memoryMaxTokens', this.value)"
+                    class="border rounded px-2 py-1 text-sm w-full" placeholder="4096">
+                </div>
+              </div>
+              ` : ''}
+            </div>
+          </div>
+
           <!-- Agent Messaging -->
           <div class="border-t pt-4">
             <h3 class="font-semibold mb-2 text-sm text-gray-700">💬 Agent Messaging</h3>
@@ -1068,10 +1373,9 @@
                 <input value="${agent.sandbox?.docker?.setupCommand || ''}" onchange="updateSandbox(${index}, 'setupCommand', this.value)"
                   class="border rounded px-2 py-1 text-sm w-full" placeholder="apt-get update && apt-get install -y git curl">
               </div>
-            ` : ''}
-
- </div>
+            </div>
           </div>
+          ` : ''}
 
           <!-- Steering & Streaming -->
           <div class="border-t pt-4">
