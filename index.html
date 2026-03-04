@@ -113,6 +113,50 @@
       </div>
     </div>
 
+    <!-- Global Security Configuration -->
+    <div class="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-red-500">
+      <h2 class="text-lg font-semibold mb-4 cursor-pointer section-toggle" onclick="toggleSection(this)">🛡️ Global Security Configuration</h2>
+      <div class="section-content grid gap-4">
+        <div class="bg-red-50 text-red-800 p-3 rounded text-sm mb-2">
+          <strong>Security Warning:</strong> OpenClaw can execute arbitrary commands. Always review security settings before deploying. 
+          See <a href="https://docs.openclaw.ai/gateway/security" target="_blank" rel="noopener noreferrer" class="underline">CVE-2026-25253 best practices</a>.
+        </div>
+        
+        <div class="grid md:grid-cols-3 gap-4">
+          <div>
+            <label for="globalSandboxEnabled" class="block text-sm font-medium mb-1 tooltip" data-tip="Isolate high-risk operations (like 'exec' and 'browser') into Docker containers">Global Sandbox Mode</label>
+            <select id="globalSandboxEnabled" onchange="render()" class="border rounded px-3 py-2 w-full" title="Global Sandbox Mode">
+              <option value="">Off (Direct Host Access - RISKY)</option>
+              <option value="true">Enabled (Recommended)</option>
+            </select>
+          </div>
+          <div>
+            <label for="globalSandboxSkills" class="block text-sm font-medium mb-1 tooltip" data-tip="Which skills should run in the sandbox (comma-separated)">Sandboxed Skills</label>
+            <input id="globalSandboxSkills" placeholder="exec, browser, web_fetch" value="exec, browser" onchange="render()" class="border rounded px-3 py-2 w-full">
+          </div>
+          <div>
+            <label for="globalCommandPolicy" class="block text-sm font-medium mb-1 tooltip" data-tip="Require approval for specific commands">Command Allowlist/Denylist</label>
+            <select id="globalCommandPolicy" onchange="render()" class="border rounded px-3 py-2 w-full" title="Command Allowlist/Denylist">
+              <option value="">Open (No restrictions)</option>
+              <option value="allowlist">Allowlist only (Strict)</option>
+              <option value="denylist">Denylist (Block dangerous)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4 mt-2">
+          <div>
+            <label for="globalAllowCommands" class="block text-sm font-medium mb-1">Allowed Commands (if using Allowlist)</label>
+            <textarea id="globalAllowCommands" class="border rounded px-3 py-2 w-full text-sm font-mono h-20" placeholder="[&quot;ls&quot;, &quot;pwd&quot;, &quot;git *&quot;]" onchange="render()"></textarea>
+          </div>
+          <div>
+            <label for="globalDenyCommands" class="block text-sm font-medium mb-1">Denied Commands (if using Denylist)</label>
+            <textarea id="globalDenyCommands" class="border rounded px-3 py-2 w-full text-sm font-mono h-20" placeholder="[&quot;rm -rf /*&quot;, &quot;mkfs *&quot;]" onchange="render()"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Gateway Configuration -->
     <div class="bg-white rounded-2xl shadow-lg p-6">
       <h2 class="text-lg font-semibold mb-4 cursor-pointer section-toggle" onclick="toggleSection(this)">🌐 Gateway Configuration</h2>
@@ -167,14 +211,15 @@
       <h2 class="text-lg font-semibold mb-4 cursor-pointer section-toggle" onclick="toggleSection(this)"> Plugins & Top-Level Skills</h2>
       <div class="section-content grid gap-4">
         <div>
-          <label class="block text-sm font-medium mb-1">Plugins (JSON array or object)</label>
+          <label for="pluginsConfig" class="block text-sm font-medium mb-1">Plugins (JSON array or object)</label>
           <textarea id="pluginsConfig" rows="4" onchange="render()"
-            class="border rounded px-3 py-2 w-full text-sm font-mono" placeholder="{&quot;name&quot;: &quot;my-plugin&quot;, &quot;path&quot;: &quot;~/.openclaw/plugins/my-plugin&quot;}"></textarea>
+            class="border rounded px-3 py-2 w-full text-sm font-mono" placeholder="[{&quot;name&quot;: &quot;my-plugin&quot;, &quot;path&quot;: &quot;~/.openclaw/plugins/my-plugin&quot;}]" style="height: 80px;"></textarea>
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Skills Registry (JSON object)</label>
+          <label for="skillsConfig" class="block text-sm font-medium mb-1">Skills Registry (JSON object)</label>
+          <div class="text-xs text-amber-600 mb-1 font-medium"> High-risk skills (exec, browser, web_fetch) should be sandboxed or restricted.</div>
           <textarea id="skillsConfig" rows="4" onchange="render()"
-            class="border rounded px-3 py-2 w-full text-sm font-mono" placeholder="{&quot;my-skill&quot;: {&quot;path&quot;: &quot;~/.openclaw/skills/my-skill&quot;, &quot;description&quot;: &quot;Does something&quot;}}"></textarea>
+            class="border rounded px-3 py-2 w-full text-sm font-mono" placeholder="{&quot;my-skill&quot;: {&quot;path&quot;: &quot;~/.openclaw/skills/my-skill&quot;}}" style="height: 80px;"></textarea>
         </div>
       </div>
     </div>
@@ -304,14 +349,56 @@
 
     // Channel configuration fields per channel type
     const CHANNEL_FIELDS = {
-      "telegram":   [{ key: "token", label: "Bot Token", type: "password" }, { key: "allowedChats", label: "Allowed Chat IDs (comma-separated)", type: "text" }, { key: "groupChat", label: "Enable Group Chat", type: "checkbox" }],
-      "discord":    [{ key: "token", label: "Bot Token", type: "password" }, { key: "guildId", label: "Guild/Server ID", type: "text" }, { key: "groupChat", label: "Enable Group Chat", type: "checkbox" }],
-      "whatsapp":   [{ key: "sessionFile", label: "Session File Path", type: "text" }, { key: "allowedNumbers", label: "Allowed Numbers (comma-separated)", type: "text" }],
-      "slack":      [{ key: "token", label: "Bot Token", type: "password" }, { key: "appToken", label: "App Token", type: "password" }, { key: "signingSecret", label: "Signing Secret", type: "password" }],
-      "signal":     [{ key: "number", label: "Signal Number", type: "text" }, { key: "allowedNumbers", label: "Allowed Numbers (comma-separated)", type: "text" }],
-      "irc":        [{ key: "server", label: "Server", type: "text" }, { key: "port", label: "Port", type: "number" }, { key: "nick", label: "Nick", type: "text" }, { key: "channel", label: "Channel", type: "text" }],
-      "googlechat": [{ key: "projectId", label: "Project ID", type: "text" }, { key: "keyFile", label: "Key File Path", type: "text" }, { key: "space", label: "Space Name", type: "text" }],
-      "webchat":    [{ key: "port", label: "Port", type: "number" }, { key: "secret", label: "Secret", type: "password" }, { key: "allowedOrigins", label: "Allowed Origins (comma-separated)", type: "text" }],
+      "telegram":   [
+        { key: "token", label: "Bot Token", type: "password" },
+        { key: "dmPolicy", label: "DM Policy", type: "select", options: ["pairing", "allowlist", "open", "disabled"] },
+        { key: "allowFrom", label: "Allowed User IDs (comma-separated)", type: "text" },
+        { key: "groupPolicy", label: "Group Policy", type: "select", options: ["allowlist", "open", "disabled", "mention"] },
+        { key: "mentionGating", label: "Require @mention", type: "checkbox" }
+      ],
+      "discord":    [
+        { key: "token", label: "Bot Token", type: "password" },
+        { key: "guildId", label: "Guild/Server ID", type: "text" },
+        { key: "dmPolicy", label: "DM Policy", type: "select", options: ["pairing", "allowlist", "open", "disabled"] },
+        { key: "allowFrom", label: "Allowed User IDs (comma-separated)", type: "text" },
+        { key: "groupPolicy", label: "Group Policy", type: "select", options: ["allowlist", "open", "disabled", "mention"] },
+        { key: "mentionGating", label: "Require @mention", type: "checkbox" }
+      ],
+      "whatsapp":   [
+        { key: "sessionFile", label: "Session File Path", type: "text" },
+        { key: "dmPolicy", label: "DM Policy", type: "select", options: ["pairing", "allowlist", "open", "disabled"] },
+        { key: "allowFrom", label: "Allowed Numbers (comma-separated)", type: "text" },
+        { key: "groupPolicy", label: "Group Policy", type: "select", options: ["allowlist", "open", "disabled", "mention"] },
+        { key: "selfChatMode", label: "Self Chat Mode", type: "checkbox" }
+      ],
+      "slack":      [
+        { key: "token", label: "Bot Token", type: "password" },
+        { key: "appToken", label: "App Token", type: "password" },
+        { key: "signingSecret", label: "Signing Secret", type: "password" },
+        { key: "dmPolicy", label: "DM Policy", type: "select", options: ["pairing", "allowlist", "open", "disabled"] },
+        { key: "allowFrom", label: "Allowed User IDs (comma-separated)", type: "text" }
+      ],
+      "signal":     [
+        { key: "number", label: "Signal Number", type: "text" },
+        { key: "dmPolicy", label: "DM Policy", type: "select", options: ["pairing", "allowlist", "open", "disabled"] },
+        { key: "allowFrom", label: "Allowed Numbers (comma-separated)", type: "text" }
+      ],
+      "irc":        [
+        { key: "server", label: "Server", type: "text" },
+        { key: "port", label: "Port", type: "number" },
+        { key: "nick", label: "Nick", type: "text" },
+        { key: "channel", label: "Channel", type: "text" }
+      ],
+      "googlechat": [
+        { key: "projectId", label: "Project ID", type: "text" },
+        { key: "keyFile", label: "Key File Path", type: "text" },
+        { key: "space", label: "Space Name", type: "text" }
+      ],
+      "webchat":    [
+        { key: "port", label: "Port", type: "number" },
+        { key: "secret", label: "Secret", type: "password" },
+        { key: "allowedOrigins", label: "Allowed Origins (comma-separated)", type: "text" }
+      ]
     };
 
     // Channel configs: array of { type, ...fields }
@@ -356,6 +443,14 @@
               ${fields.map(f => {
                 if (f.type === 'checkbox') {
                   return `<div class="flex items-center"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" ${ch[f.key] ? 'checked' : ''} onchange="updateChannelField('${ch.type}', '${f.key}', this.checked)"><span class="text-sm">${f.label}</span></label></div>`;
+                } else if (f.type === 'select') {
+                  return `<div>
+                    <label class="block text-xs text-gray-500 mb-1 tooltip" data-tip="${f.label} Policy">${f.label}</label>
+                    <select onchange="updateChannelField('${ch.type}', '${f.key}', this.value)" class="border rounded px-2 py-1 text-sm w-full" title="${f.label}">
+                      <option value="">Default</option>
+                      ${f.options.map(opt => `<option value="${opt}" ${ch[f.key] === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                    </select>
+                  </div>`;
                 }
                 const val = ch[f.key] || '';
                 return `<div><label class="block text-xs text-gray-500 mb-1">${f.label}</label><input type="${f.type}" value="${val}" onchange="updateChannelField('${ch.type}', '${f.key}', this.value)" class="border rounded px-2 py-1 text-sm w-full" placeholder="${f.label}"></div>`;
@@ -765,14 +860,57 @@
       const gatewayPort = document.getElementById('gatewayPort').value.trim();
       const gatewayHost = document.getElementById('gatewayHost').value.trim();
       const gatewayAuthToken = document.getElementById('gatewayAuthToken').value.trim();
+      const gatewayRemoteToken = document.getElementById('gatewayRemoteToken').value.trim();
+      const gatewayRedactLogs = document.getElementById('gatewayRedactLogs').value;
       const gatewayExtraRaw = document.getElementById('gatewayExtra').value.trim();
-      if (gatewayPort || gatewayHost || gatewayAuthToken || gatewayExtraRaw) {
+      if (gatewayPort || gatewayHost || gatewayAuthToken || gatewayRemoteToken || gatewayRedactLogs || gatewayExtraRaw) {
         let gatewayExtra = {};
         if (gatewayExtraRaw) { try { gatewayExtra = JSON.parse(gatewayExtraRaw); } catch(e) {} }
         config.gateway = Object.assign({}, config.gateway || {}, gatewayExtra);
         if (gatewayPort) config.gateway.port = parseInt(gatewayPort);
         if (gatewayHost) config.gateway.host = gatewayHost;
         if (gatewayAuthToken) config.gateway.auth = Object.assign({}, (config.gateway.auth || {}), { token: gatewayAuthToken });
+        if (gatewayRemoteToken) config.gateway.remote = Object.assign({}, (config.gateway.remote || {}), { token: gatewayRemoteToken });
+        if (gatewayRedactLogs === 'true') {
+          config.gateway.logging = Object.assign({}, (config.gateway.logging || {}), { redactSensitive: true });
+        } else if (gatewayRedactLogs === 'false') {
+          config.gateway.logging = Object.assign({}, (config.gateway.logging || {}), { redactSensitive: false });
+        }
+      }
+
+      // Build Global Security Section
+      const globalSandboxEnabled = document.getElementById('globalSandboxEnabled').value;
+      const globalSandboxSkills = document.getElementById('globalSandboxSkills').value.trim();
+      const globalCommandPolicy = document.getElementById('globalCommandPolicy').value;
+      const globalAllowCommandsRaw = document.getElementById('globalAllowCommands').value.trim();
+      const globalDenyCommandsRaw = document.getElementById('globalDenyCommands').value.trim();
+      
+      if (globalSandboxEnabled || globalSandboxSkills || globalCommandPolicy || globalAllowCommandsRaw || globalDenyCommandsRaw) {
+        if (!config.security) config.security = {};
+        
+        // Sandbox
+        if (globalSandboxEnabled) {
+          if (!config.security.sandbox) config.security.sandbox = {};
+          config.security.sandbox.enabled = true;
+          if (globalSandboxSkills) {
+            config.security.sandbox.skills = globalSandboxSkills.split(',').map(s => s.trim()).filter(s => s);
+          }
+        }
+        
+        // Command Policy
+        if (globalCommandPolicy) {
+          if (!config.security.commands) config.security.commands = {};
+          config.security.commands.policy = globalCommandPolicy;
+          
+          if (globalCommandPolicy === 'allowlist' && globalAllowCommandsRaw) {
+            try { config.security.commands.allowlist = JSON.parse(globalAllowCommandsRaw); } 
+            catch(e) { config.security.commands.allowlist = globalAllowCommandsRaw.split('\n').map(s => s.trim()).filter(s => s); }
+          }
+          if (globalCommandPolicy === 'denylist' && globalDenyCommandsRaw) {
+            try { config.security.commands.denylist = JSON.parse(globalDenyCommandsRaw); } 
+            catch(e) { config.security.commands.denylist = globalDenyCommandsRaw.split('\n').map(s => s.trim()).filter(s => s); }
+          }
+        }
       }
 
       // Build top-level channels section
@@ -971,6 +1109,28 @@
         return;
       }
       
+      // Load Global Security Settings
+      if (config.security) {
+        if (config.security.sandbox) {
+          if (config.security.sandbox.enabled) document.getElementById('globalSandboxEnabled').value = 'true';
+          if (config.security.sandbox.skills) {
+            document.getElementById('globalSandboxSkills').value = Array.isArray(config.security.sandbox.skills) ? 
+              config.security.sandbox.skills.join(', ') : config.security.sandbox.skills;
+          }
+        }
+        if (config.security.commands) {
+          if (config.security.commands.policy) document.getElementById('globalCommandPolicy').value = config.security.commands.policy;
+          if (config.security.commands.allowlist) {
+            document.getElementById('globalAllowCommands').value = Array.isArray(config.security.commands.allowlist) ? 
+              JSON.stringify(config.security.commands.allowlist) : config.security.commands.allowlist;
+          }
+          if (config.security.commands.denylist) {
+            document.getElementById('globalDenyCommands').value = Array.isArray(config.security.commands.denylist) ? 
+              JSON.stringify(config.security.commands.denylist) : config.security.commands.denylist;
+          }
+        }
+      }
+
       // Load global defaults
       const defaults = config.agents.defaults || {};
       // Handle model: can be string or { primary: ... }
@@ -1138,6 +1298,48 @@
           fieldDefs.forEach(f => {
             if (chData[f.key] !== undefined) {
               if (f.key === 'allowedChats' || f.key === 'allowedNumbers') {
+                ch[f.key] = Array.isArray(chData[f.key]) ? chData[f.key].join(', ') : chData[f.key];
+              } else if (f.key === 'allowedOrigins') {
+                ch[f.key] = Array.isArray(chData[f.key]) ? chData[f.key].join(', ') : chData[f.key];
+              } else {
+                ch[f.key] = chData[f.key];
+              }
+            }
+          });
+          const extraFields = Object.entries(chData).filter(([k]) => !knownKeys.includes(k));
+          if (extraFields.length) ch._extra = JSON.stringify(Object.fromEntries(extraFields), null, 2);
+          channelConfigs.push(ch);
+        });
+      }
+      renderChannelConfigs();
+
+      // Load gateway settings
+      if (config.gateway) {
+        if (config.gateway.port) document.getElementById('gatewayPort').value = config.gateway.port;
+        if (config.gateway.host) document.getElementById('gatewayHost').value = config.gateway.host;
+        if (config.gateway.auth && config.gateway.auth.token) document.getElementById('gatewayAuthToken').value = config.gateway.auth.token;
+        if (config.gateway.remote && config.gateway.remote.token) document.getElementById('gatewayRemoteToken').value = config.gateway.remote.token;
+        if (config.gateway.logging && config.gateway.logging.redactSensitive !== undefined) {
+          document.getElementById('gatewayRedactLogs').value = config.gateway.logging.redactSensitive ? 'true' : 'false';
+        }
+        // Build extra config minus standard fields
+        const { port, host, auth, remote, logging, ...extraGateway } = config.gateway;
+        if (Object.keys(extraGateway).length > 0) {
+          document.getElementById('gatewayExtra').value = JSON.stringify(extraGateway, null, 2);
+        }
+      }
+
+      // Load channel settings
+      channelConfigs = [];
+      if (config.channels) {
+        Object.entries(config.channels).forEach(([type, chData]) => {
+          if (!chData || typeof chData !== 'object') return;
+          const fieldDefs = CHANNEL_FIELDS[type] || [];
+          const knownKeys = fieldDefs.map(f => f.key);
+          const ch = { type, _extra: '' };
+          fieldDefs.forEach(f => {
+            if (chData[f.key] !== undefined) {
+              if (f.key === 'allowedChats' || f.key === 'allowedNumbers' || f.key === 'allowFrom') {
                 ch[f.key] = Array.isArray(chData[f.key]) ? chData[f.key].join(', ') : chData[f.key];
               } else if (f.key === 'allowedOrigins') {
                 ch[f.key] = Array.isArray(chData[f.key]) ? chData[f.key].join(', ') : chData[f.key];
