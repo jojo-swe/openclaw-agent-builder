@@ -65,7 +65,7 @@
         <div>
           <label class="block text-sm font-medium mb-2">Or paste config JSON</label>
           <textarea id="configPaste" 
-            class="border rounded px-3 py-2 w-full text-sm h-20" placeholder='{"agents": {"defaults": {...}, "list": [...]}}'></textarea>
+            class="border rounded px-3 py-2 w-full text-sm h-20" placeholder="{&quot;agents&quot;: {&quot;defaults&quot;: {...}, &quot;list&quot; [...]}}"></textarea>
           <button onclick="loadConfigFromPaste()" class="mt-2 bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">Import Pasted Config</button>
         </div>
       </div>
@@ -135,14 +135,14 @@
         <div class="md:col-span-3">
           <label class="block text-sm font-medium mb-1">Extra Gateway Config (JSON, merged into gateway section)</label>
           <textarea id="gatewayExtra" rows="3" onchange="render()"
-            class="border rounded px-3 py-2 w-full text-sm font-mono" placeholder='{"cors": true, "rateLimit": 100}'></textarea>
+            class="border rounded px-3 py-2 w-full text-sm font-mono" placeholder="{&quot;cors&quot;: true, &quot;rateLimit&quot;: 100}"></textarea>
         </div>
       </div>
     </div>
 
     <!-- Channels Configuration -->
     <div class="bg-white rounded-2xl shadow-lg p-6">
-      <h2 class="text-lg font-semibold mb-4 cursor-pointer section-toggle" onclick="toggleSection(this)">📡 Channels Configuration</h2>
+      <h2 class="text-lg font-semibold mb-4 cursor-pointer section-toggle" onclick="toggleSection(this)"> Channels Configuration</h2>
       <div class="section-content">
         <div id="channelConfigsContainer" class="grid gap-4"></div>
         <div class="mt-4 flex gap-3 items-center">
@@ -164,17 +164,17 @@
 
     <!-- Plugins & Skills Registry -->
     <div class="bg-white rounded-2xl shadow-lg p-6">
-      <h2 class="text-lg font-semibold mb-4 cursor-pointer section-toggle" onclick="toggleSection(this)">🧩 Plugins & Top-Level Skills</h2>
+      <h2 class="text-lg font-semibold mb-4 cursor-pointer section-toggle" onclick="toggleSection(this)"> Plugins & Top-Level Skills</h2>
       <div class="section-content grid gap-4">
         <div>
           <label class="block text-sm font-medium mb-1">Plugins (JSON array or object)</label>
           <textarea id="pluginsConfig" rows="4" onchange="render()"
-            class="border rounded px-3 py-2 w-full text-sm font-mono" placeholder='[{"name": "my-plugin", "path": "~/.openclaw/plugins/my-plugin"}]'></textarea>
+            class="border rounded px-3 py-2 w-full text-sm font-mono" placeholder="{&quot;name&quot;: &quot;my-plugin&quot;, &quot;path&quot;: &quot;~/.openclaw/plugins/my-plugin&quot;}"></textarea>
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">Skills Registry (JSON object)</label>
           <textarea id="skillsConfig" rows="4" onchange="render()"
-            class="border rounded px-3 py-2 w-full text-sm font-mono" placeholder='{"my-skill": {"path": "~/.openclaw/skills/my-skill", "description": "Does something"}}'></textarea>
+            class="border rounded px-3 py-2 w-full text-sm font-mono" placeholder="{&quot;my-skill&quot;: {&quot;path&quot;: &quot;~/.openclaw/skills/my-skill&quot;, &quot;description&quot;: &quot;Does something&quot;}}"></textarea>
         </div>
       </div>
     </div>
