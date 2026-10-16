@@ -176,6 +176,19 @@
           <input id="gatewayAuthToken" type="password" placeholder="secret-token" onchange="render()"
             class="border rounded px-3 py-2 w-full">
         </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Remote Token</label>
+          <input id="gatewayRemoteToken" type="password" placeholder="remote-token" onchange="render()"
+            class="border rounded px-3 py-2 w-full">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Redact Sensitive Logs</label>
+          <select id="gatewayRedactLogs" onchange="render()" class="border rounded px-3 py-2 w-full">
+            <option value="">Default</option>
+            <option value="true">Yes</option>
+            <option value="false">No</option>
+          </select>
+        </div>
         <div class="md:col-span-3">
           <label class="block text-sm font-medium mb-1">Extra Gateway Config (JSON, merged into gateway section)</label>
           <textarea id="gatewayExtra" rows="3" onchange="render()"
@@ -1283,8 +1296,13 @@
       document.getElementById('gatewayPort').value = gw.port || '';
       document.getElementById('gatewayHost').value = gw.host || '';
       document.getElementById('gatewayAuthToken').value = gw.auth?.token || '';
-      // Extra gateway fields (exclude known ones)
-      const { port: _gwPort, host: _gwHost, auth: _gwAuth, ...gwExtra } = gw;
+      document.getElementById('gatewayRemoteToken').value = gw.remote?.token || '';
+      document.getElementById('gatewayRedactLogs').value =
+        gw.logging && gw.logging.redactSensitive !== undefined
+          ? (gw.logging.redactSensitive ? 'true' : 'false')
+          : '';
+      // Extra gateway fields (exclude fields that have their own inputs)
+      const { port: _gwPort, host: _gwHost, auth: _gwAuth, remote: _gwRemote, logging: _gwLogging, ...gwExtra } = gw;
       document.getElementById('gatewayExtra').value = Object.keys(gwExtra).length ? JSON.stringify(gwExtra, null, 2) : '';
 
       // Load channel configs
@@ -1312,22 +1330,6 @@
         });
       }
       renderChannelConfigs();
-
-      // Load gateway settings
-      if (config.gateway) {
-        if (config.gateway.port) document.getElementById('gatewayPort').value = config.gateway.port;
-        if (config.gateway.host) document.getElementById('gatewayHost').value = config.gateway.host;
-        if (config.gateway.auth && config.gateway.auth.token) document.getElementById('gatewayAuthToken').value = config.gateway.auth.token;
-        if (config.gateway.remote && config.gateway.remote.token) document.getElementById('gatewayRemoteToken').value = config.gateway.remote.token;
-        if (config.gateway.logging && config.gateway.logging.redactSensitive !== undefined) {
-          document.getElementById('gatewayRedactLogs').value = config.gateway.logging.redactSensitive ? 'true' : 'false';
-        }
-        // Build extra config minus standard fields
-        const { port, host, auth, remote, logging, ...extraGateway } = config.gateway;
-        if (Object.keys(extraGateway).length > 0) {
-          document.getElementById('gatewayExtra').value = JSON.stringify(extraGateway, null, 2);
-        }
-      }
 
       // Load channel settings
       channelConfigs = [];
