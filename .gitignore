@@ -27,3 +27,13 @@ coverage/
 # Temp files
 *.tmp
 *.log
+
+# privacy-guard: local secrets, logs, and editor state
+.env
+.env.*
+!.env.example
+logs/
+*.local
+*.local.*
+.vscode/settings.json
+secrets/
