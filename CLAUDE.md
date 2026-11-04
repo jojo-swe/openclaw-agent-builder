@@ -1,3 +1,5 @@
+@AGENTS.md
+
 # OpenClaw Agent Builder
 
 Single-file HTML app (`index.html`) — no build step, no dependencies beyond Tailwind CDN.
