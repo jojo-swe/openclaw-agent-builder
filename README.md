@@ -1,3 +1,5 @@
+<p align="center"><img src=".github/assets/logo.svg" alt="openclaw-agent-builder logo" width="128"></p>
+
 # OpenClaw Agent Builder
 
 A visual, browser-based configuration editor for [OpenClaw](https://github.com/openclaw/openclaw) agent configs.
